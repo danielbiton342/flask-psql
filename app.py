@@ -6,11 +6,11 @@ import os
 app = Flask(__name__)
 
 # Database connection details
-DB_HOST = os.getenv("DB_HOST", "10.0.1.4")  # Replace with your actual host
-DB_PORT = os.getenv("DB_PORT", "5432")  # Replace with your actual port
-DB_NAME = os.getenv("DB_NAME", "flask_db")  # Replace with your actual database name
-DB_USER = os.getenv("DB_USER", "postgres")  # Replace with your actual username
-DB_PASSWORD = os.getenv("DB_PASSWORD", "password")  # Replace with your actual password
+DB_HOST = os.getenv("DB_HOST", "10.0.1.4")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "flask_db")
+DB_USER = os.getenv("DB_USER", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
 
 
 @app.route("/", methods=["GET"])
@@ -135,4 +135,3 @@ def retrieve_data(name):
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8080)
-
