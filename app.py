@@ -44,24 +44,31 @@ def disconnect_from_database(conn, cur):
 def process_data():
     try:
         data = request.json
+        if not data:
+            return jsonify({"status": "error", "message": "No JSON data provided"}), 400
 
         name = data.get("name")
         age_value = data.get("age_value")
         time = data.get("time")
 
+        if not all([name, age_value, time]):
+            return jsonify({"status": "error", "message": "Missing required fields"}), 400
+
         conn = connect_to_database()
         if not conn:
-            response = {"status": "error", "message": "Database connection error"}
-            return jsonify(response), 500
+            return jsonify({"status": "error", "message": "Database connection error"}), 500
 
         cur = conn.cursor()
 
-        # Execute the INSERT statement with ON CONFLICT DO NOTHING
-        insert_query = "INSERT INTO table_gifts_yovel (name, age_value, time) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING"
-        cur.execute(insert_query, (name, age_value, time))
-
-        # Commit the changes
-        conn.commit()
+        try:
+            insert_query = "INSERT INTO table_gifts_yovel (name, age_value, time) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING"
+            cur.execute(insert_query, (name, age_value, time))
+            conn.commit()
+        except psycopg2.Error as e:
+            response = {"status": "error", "message": "Database error", "error_details": str(e)}
+            return jsonify(response), 500
+        finally:
+            disconnect_from_database(conn, cur)
 
         response = {
             "status": "success",
@@ -70,20 +77,10 @@ def process_data():
             "time": time,
             "database_status": "Data inserted successfully",
         }
-
-        disconnect_from_database(conn, cur)
         return jsonify(response)
 
-    except psycopg2.Error as e:
-        response = {
-            "status": "error",
-            "message": "Database error",
-            "error_details": str(e),
-        }
-
-        disconnect_from_database(conn, cur)
-        return jsonify(response), 500
-
+    except Exception as e:
+        return jsonify({"status": "error", "message": "Server error", "error_details": str(e)}), 500
 
 @app.route("/data/<name>", methods=["GET"])
 def retrieve_data(name):
