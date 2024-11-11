@@ -1,56 +1,60 @@
+
 #!/bin/bash
 
-# Check if the environment variable for password is set
-if [ -z "$PG_PASSWORD" ]; then
-  echo "ERROR: The environment variable PG_PASSWORD is not set!"
-  exit 1
+# -------------------------------------------------------------------------
+# -------------------- Mounting data disk to the VM -----------------------
+# Prepare a new empty disk
+sudo parted /dev/sdc --script mklabel gpt mkpart xfspart xfs 0% 100%
+sudo mkfs.xfs /dev/sdc1
+sudo partprobe /dev/sdc1
+
+# Mount the disk
+sudo mkdir /datadrive
+sudo mount /dev/sdc1 /datadrive
+sudo blkid
+sudo sh -c 'echo "$(blkid | grep -o "UUID=\"[0-9a-f-]\+\"" | tail -1)   /datadrive   xfs   defaults,nofail   1   2" >> /etc/fstab'
+
+# -------------------------------------------------------------------------------
+# -------------------- Installing and configuring PostgreSQL --------------------
+
+# Check if the environment variable POSTGRES_PASSWORD is set
+if [ -z "$POSTGRES_PASSWORD" ]; then
+    echo "Error: Environment variable POSTGRES_PASSWORD is not set."
+    exit 1
 fi
 
-# Update the package list
-echo "Updating package list..."
-sudo apt-get update -y
+# Add PostgreSQL repository
+sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
 
-# Install necessary dependencies
-echo "Installing dependencies..."
-sudo apt-get install -y wget ca-certificates curl gnupg lsb-release
+# Import PostgreSQL repository key
+wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
 
-# Add PostgreSQL APT repository
-echo "Adding PostgreSQL repository..."
-wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /etc/apt/trusted.gpg.d/pgdg.asc
-echo "deb http://apt.postgresql.org/pub/repos/apt/ jammy-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
-
-# Update the package list again after adding the repository
-echo "Updating package list after adding PostgreSQL repository..."
-sudo apt-get update -y
+# Update package lists
+sudo apt-get update
 
 # Install PostgreSQL
-echo "Installing PostgreSQL..."
-sudo apt-get install -y postgresql postgresql-contrib
+sudo apt-get -y install postgresql
 
-# Install additional dependencies (if needed for PostgreSQL extensions, etc.)
-echo "Installing additional dependencies for PostgreSQL..."
-sudo apt-get install -y build-essential libreadline-dev zlib1g-dev
+# Create user, database, and table, and grant privileges to the user
+sudo -i -u postgres psql -c "ALTER USER postgres PASSWORD '${POSTGRES_PASSWORD}';"
+sudo -i -u postgres psql -c "CREATE DATABASE flask_db;"
+sudo -i -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE flask_db TO postgres;"
+sudo -i -u postgres psql -d flask_db -c "CREATE TABLE table_gifts_yovel (name VARCHAR, age_value NUMERIC, time VARCHAR);"
 
-# Enable and start PostgreSQL service
-echo "Enabling and starting PostgreSQL service..."
-sudo systemctl enable postgresql
-sudo systemctl start postgresql
+# Find the location of postgresql.conf and modify to allow remote connections
+sudo find /etc/postgresql -name "postgresql.conf" -exec sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" {} \;
 
-# Check the PostgreSQL service status
-echo "Checking PostgreSQL service status..."
-sudo systemctl status postgresql
+# Allow client connections to all databases
+sudo find /etc/postgresql -name "pg_hba.conf" -exec sudo sed -i "$ a\host all all 0.0.0.0/0 md5" {} \; 
 
-# Print PostgreSQL version to confirm installation
-echo "PostgreSQL version:"
-psql --version
+# Stop PostgreSQL service
+sudo service postgresql stop
 
-# Create the database and user, and set the password from environment variable
-echo "Creating PostgreSQL database and user..."
-sudo -i -u postgres psql <<EOF
-CREATE DATABASE mydatabase;
-CREATE USER myuser WITH ENCRYPTED PASSWORD '${PG_PASSWORD}';
-GRANT ALL PRIVILEGES ON DATABASE mydatabase TO myuser;
-EOF
+# Move the data directory to the new mount point
+sudo mv /var/lib/postgresql/*/main /datadrive/postgres-data
+sudo find /etc/postgresql -name "postgresql.conf" -exec sudo sed -i "s|data_directory = '.*'|data_directory = '/datadrive/postgres-data'|" {} \;
 
-# Done
-echo "PostgreSQL installation and database creation completed successfully."
+# Restart PostgreSQL service
+sudo systemctl restart postgresql
+
+echo "PostgreSQL setup complete. Password is stored in the environment variable POSTGRES_PASSWORD."
