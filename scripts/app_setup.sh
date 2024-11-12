@@ -1,27 +1,24 @@
 #!/bin/bash
-set -euo pipefail #script will fail quickly if there is an error and gets better outputs 
+set -euo pipefail #script will fail quickly if there is an error and gets better outputs
 
 sudo apt-get update
 sudo apt-get install -yq python3-pip
 sudo pip install psycopg2-binary flask
 
-echo "installed all successfully" 
+echo "installed all successfully"
 
-sudo chmod +x /var/lib/waagent/custom-script/download/0/terraform/application/flaskApp/flaskApp.py
+sudo chmod +x ~/flask-psql/app.py
 
-# the crontab does not work yet... 
-#sudo (crontab -l 2>/dev/null; echo "@reboot /usr/bin/python3 /var/lib/waagent/custom-script/download/0/Final_project/Terraform/flaskApp/flaskApp.py") | crontab -
+# the crontab does not work yet...
+#sudo (crontab -l 2>/dev/null; echo "@reboot /usr/bin/python3 ~/flask-psql/app.py") | crontab -
 
 #echo "inserted data to crontab successfully"
-
-sudo python3 /var/lib/waagent/custom-script/download/0/terraform/application/flaskApp/flaskApp.py > output.log 2>&1 &
-
 echo "python is running successfully"
 
-APP_PATH="/var/lib/waagent/custom-script/download/0/terraform/application/flaskApp"
+APP_PATH="/home/terademo/flask-psql"
 APP_PYTHON="/usr/bin/python3"
-APP_USER="azureuser"
-SERVICE_NAME="my_flask_app_service"
+APP_USER="terademo"
+SERVICE_NAME="flask-app-service"
 cat << EOF | sudo tee /etc/systemd/system/$SERVICE_NAME.service
 [Unit]
 Description=My Flask Application
@@ -30,7 +27,7 @@ After=network.target
 [Service]
 User=$APP_USER
 WorkingDirectory=$APP_PATH
-ExecStart=$APP_PYTHON $APP_PATH/flaskApp.py
+ExecStart=$APP_PYTHON $APP_PATH/app.py
 
 [Install]
 WantedBy=multi-user.target
