@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 # Update system
@@ -6,19 +7,27 @@ sudo apt update && sudo apt upgrade -y
 # Install PostgreSQL
 sudo apt install -y postgresql postgresql-contrib
 
-# Set up environment variable for database password
+# Get PostgreSQL version and set config paths
+PGVERSION=$(pg_config --version | awk '{print $2}' | cut -d. -f1)
+PGCONF="/etc/postgresql/${PGVERSION}/main/postgresql.conf"
+PGHBA="/etc/postgresql/${PGVERSION}/main/pg_hba.conf"
 
+# Set up environment variable for database password
+echo "export DB_PASSWORD='your_secure_password'" >> ~/.bashrc
+source ~/.bashrc
 
 # Configure PostgreSQL
-sudo -u postgres psql -c "CREATE DATABASE testdb;"
-sudo -u postgres psql -c "CREATE USER testuser WITH PASSWORD '$DB_PASSWORD';"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE testdb TO testuser;"
+sudo -u postgres psql << EOF
+CREATE DATABASE testdb;
+CREATE USER testuser WITH PASSWORD '$DB_PASSWORD';
+GRANT ALL PRIVILEGES ON DATABASE testdb TO testuser;
+EOF
 
 # Allow connections from the app subnet (adjust the IP range as needed)
-echo "host all all 10.0.1.0/24 md5" | sudo tee -a /etc/postgresql/12/main/pg_hba.conf
+echo "host all all 10.0.1.0/24 md5" | sudo tee -a $PGHBA
 
 # Configure PostgreSQL to listen on all interfaces
-sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/12/main/postgresql.conf
+sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" $PGCONF
 
 # Restart PostgreSQL
 sudo systemctl restart postgresql
