@@ -1,53 +1,136 @@
-import os
-from flask import Flask, jsonify
+from flask import Flask, request, jsonify, render_template
 import psycopg2
+from psycopg2 import Error
+import os
 
 app = Flask(__name__)
 
-# Retrieve the secret values (environment variables) set in GitHub Codespaces
-DB_HOST = "10.0.2.0"
-DB_NAME = flask_db
-DB_USER = adminuser
-DB_PASSWORD = os.getenv("DB_PASSWORD")  # Get database password from Codespace secret
-DB_PORT = 5432
+# Database connection details
+DB_HOST = '10.0.2.4'  # Replace with your actual host
+DB_PORT = '5432'  # Replace with your actual port
+DB_NAME = 'mydatabase'  # Replace with your actual database name
+DB_USER = 'myuser'  # Replace with your actual username
+DB_PASSWORD = os.getenv("DB_PASSWORD") 
 
-# Function to connect to the PostgreSQL database
-def get_db_connection():
+@app.route('/', methods=['GET'])
+def index():
+    return render_template('flaskApp.html')
+
+def connect_to_database():
     try:
         conn = psycopg2.connect(
             host=DB_HOST,
+            port=DB_PORT,
             database=DB_NAME,
             user=DB_USER,
-            password=DB_PASSWORD,
-            port=DB_PORT
+            password=DB_PASSWORD
         )
         return conn
-    except Exception as e:
-        print(f"Error connecting to database: {e}")
+    except psycopg2.Error as e:
+        print(f"Error connecting to the database: {e}")
         return None
 
-# Route to fetch users from the database
-@app.route('/users', methods=['GET'])
-def get_users():
-    conn = get_db_connection()
-    if conn is None:
-        return jsonify({"error": "Unable to connect to the database"}), 500
+def disconnect_from_database(conn, cur):
+    if cur:
+        cur.close()
+    if conn:
+        conn.close()
 
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM users;')
-    users = cursor.fetchall()
-    cursor.close()
-    conn.close()
+@app.route('/data', methods=['POST'])
+def process_data():
+    try:
+        data = request.json
 
-    # Format the result
-    users_list = [{"id": user[0], "name": user[1], "email": user[2]} for user in users]
-    return jsonify(users_list)
+        name = data.get('name')
+        age_value = data.get('age_value')
+        time = data.get('time')
 
-# Home route
-@app.route('/')
-def home():
-    return "Welcome to the Simple Python App with PostgreSQL!"
+        conn = connect_to_database()
+        if not conn:
+            response = {
+                'status': 'error',
+                'message': 'Database connection error'
+            }
+            return jsonify(response), 500
+
+        cur = conn.cursor()
+
+        # Execute the INSERT statement with ON CONFLICT DO NOTHING
+        insert_query = "INSERT INTO table_gifts_yovel (name, age_value, time) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING"
+        cur.execute(insert_query, (name, age_value, time))
+
+        # Commit the changes
+        conn.commit()
+
+        response = {
+            'status': 'success',
+            'name': name,
+            'age_value': age_value,
+            'time': time,
+            'database_status': 'Data inserted successfully'
+        }
+
+        disconnect_from_database(conn, cur)
+        return jsonify(response)
+
+    except psycopg2.Error as e:
+        response = {
+            'status': 'error',
+            'message': 'Database error',
+            'error_details': str(e)
+        }
+
+        disconnect_from_database(conn, cur)
+        return jsonify(response), 500
+
+@app.route('/data/<name>', methods=['GET'])
+def retrieve_data(name):
+    try:
+        conn = connect_to_database()
+        if not conn:
+            response = {
+                'status': 'error',
+                'message': 'Database connection error'
+            }
+            return jsonify(response), 500
+
+        cur = conn.cursor()
+
+        # Execute the SELECT statement to retrieve data based on name
+        select_query = "SELECT * FROM table_gifts_yovel WHERE name = %s"
+        cur.execute(select_query, (name,))
+        result = cur.fetchone()
+
+        if result:
+            # Retrieve the relevant information from the database
+            name = result[0]
+            age_value = result[1]
+            time = result[2]
+
+            response = {
+                'status': 'success',
+                'name': name,
+                'age_value': age_value,
+                'time': time
+            }
+        else:
+            response = {
+                'status': 'error',
+                'message': 'Data not found for the provided name'
+            }
+
+        disconnect_from_database(conn, cur)
+        return jsonify(response)
+
+    except psycopg2.Error as e:
+        response = {
+            'status': 'error',
+            'message': 'Database error',
+            'error_details': str(e)
+        }
+        disconnect_from_database(conn, cur)
+        return jsonify(response), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    app.run(host='0.0.0.0', port="8080")
 
