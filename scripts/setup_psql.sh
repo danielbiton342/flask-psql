@@ -1,48 +1,29 @@
 #!/bin/bash
 
-# -------------------------------------------------------------------------
-# -------------------- Mounting data disk to the VM -----------------------
-# Check if the data disk is already mounted
-if grep -qs '/datadrive' /proc/mounts; then
-  echo "Data disk is already mounted."
-else
-  # Prepare a new empty disk
-  sudo parted /dev/sdc --script mklabel gpt mkpart xfspart xfs 0% 100%
-  sudo mkfs.xfs /dev/sdc1
-  sudo partprobe /dev/sdc1
-
-  # Mount the disk
-  sudo mkdir /datadrive
-  sudo mount /dev/sdc1 /datadrive
-  sudo sh -c 'echo "$(blkid | grep -o "UUID=\"[0-9a-f-]\+\"" | tail -1)  /datadrive  xfs  defaults,nofail  1  2" >> /etc/fstab'
-  echo "Data disk mounted successfully."
-fi
-
-# Check if the environment variable POSTGRES_PASSWORD is set
-if [ -z "$POSTGRES_PASSWORD" ]; then
-  echo "Error: Environment variable POSTGRES_PASSWORD is not set."
-  exit 1
-fi
+# Update system
+sudo apt update && sudo apt upgrade -y
 
 # Install PostgreSQL
-sudo apt-get update
-sudo apt-get -y install postgresql
+sudo apt install -y postgresql postgresql-contrib
 
-# Create a new PostgreSQL role and database
-sudo -u postgres psql -c "CREATE ROLE myuser WITH LOGIN PASSWORD '${POSTGRES_PASSWORD}';"
-sudo -u postgres psql -c "CREATE DATABASE mydatabase OWNER myuser;"
+# Set up environment variable for database password
 
-# Grant all privileges on the database to the user
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE mydatabase TO myuser;"
 
-# Create a table in the database with columns for name, age_value, and time
-sudo -u postgres psql -d mydatabase -c "CREATE TABLE mytable (name VARCHAR, age_value NUMERIC, time VARCHAR);"
+# Configure PostgreSQL
+sudo -u postgres psql -c "CREATE DATABASE testdb;"
+sudo -u postgres psql -c "CREATE USER testuser WITH PASSWORD '$DB_PASSWORD';"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE testdb TO testuser;"
 
-# Insert sample values into the table
-sudo -u postgres psql -d mydatabase -c "INSERT INTO mytable (name, age_value, time) VALUES ('Alice', 30, 'morning'), ('Bob', 25, 'afternoon');"
+# Allow connections from the app subnet (adjust the IP range as needed)
+echo "host all all 10.0.1.0/24 md5" | sudo tee -a /etc/postgresql/12/main/pg_hba.conf
 
-# Restart PostgreSQL service
+# Configure PostgreSQL to listen on all interfaces
+sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/12/main/postgresql.conf
+
+# Restart PostgreSQL
 sudo systemctl restart postgresql
 
-echo "PostgreSQL setup complete. Initial user, database, table created, and sample values inserted. Password is stored in the environment variable POSTGRES_PA
-SSWORD."
+# Enable PostgreSQL to start on boot
+sudo systemctl enable postgresql
+
+echo "PostgreSQL setup complete!"
