@@ -44,4 +44,5 @@ sudo -u postgres psql -d mydatabase -c "INSERT INTO mytable (name, age_value, ti
 # Restart PostgreSQL service
 sudo systemctl restart postgresql
 
-echo "PostgreSQL setup complete. Initial user, database, table created, and sample values inserted. Password is stored in the environment variable POSTGRES_PASSWORD."
+echo "PostgreSQL setup complete. Initial user, database, table created, and sample values inserted. Password is stored in the environment variable POSTGRES_PA
+SSWORD."
